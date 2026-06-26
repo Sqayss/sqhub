@@ -251,7 +251,7 @@ end)
 -- === GUI ===
 local Window = Rayfield:CreateWindow({
     Name = "Sqays Noob Incremental",
-    LoadingTitle = "Yukleniyor...",
+    LoadingTitle = "Loading...",
     ConfigurationSaving = {Enabled = true, FileName = "SqaysConfig"}
 })
 
