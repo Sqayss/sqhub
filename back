@@ -1,4 +1,4 @@
--- Sqays Hub – FULL (Mine, Hızlı Combat, Realm3, Trials) – Countdown≤5s + 2s Return + Safe Join
+-- Sqays Hub – FULL (Mine, Hızlı Combat, Realm3, Trials) – Countdown≤5s + 2s Return + Safe Join (Wave 100)
 local env = _G
 if env.NILoaded then return end
 env.NILoaded = true; env.NIStop = false
@@ -441,7 +441,6 @@ local function autoT1ChestLoop() while S.autoT1Chest and not env.NIStop do openC
 local function autoT2ChestLoop() while S.autoT2Chest and not env.NIStop do openChest("T2TrialChest"); task.wait(1) end end
 
 -- ===== TRIAL SYSTEM =====
--- Güvenli teleport: karakter yoksa veya HRP yoksa false döner, asla hata vermez
 local function teleportTo(pos)
     local ok, result = pcall(function()
         local char = LP.Character
@@ -458,7 +457,6 @@ local function teleportTo(pos)
     end
     return result
 end
-
 local function getCountdownLabel(diff)
     local obj = WS
     for _, name in ipairs(Trials[diff].path) do if obj then obj = obj:FindFirstChild(name) end end
@@ -468,14 +466,12 @@ local function getCountdownLabel(diff)
     end
     return nil
 end
-
 local function parseCountdown(text)
     if not text then return 0 end
     local min = tonumber(text:match("(%d+)m")) or 0
     local sec = tonumber(text:match("(%d+)s")) or 0
     return min * 60 + sec
 end
-
 local function findTrialMob(diff)
     local room = WS:FindFirstChild("__GAME_CONTENT") and WS.__GAME_CONTENT:FindFirstChild("Trials") and WS.__GAME_CONTENT.Trials:FindFirstChild(Trials[diff].room)
     if not room then return nil end
@@ -493,7 +489,7 @@ local function findTrialMob(diff)
     return best
 end
 
--- Auto Join Countdown ≤5s (yüksek güvenlikli)
+-- Auto Join Countdown ≤5s (güvenli)
 task.spawn(function()
     while not env.NIStop do
         local success, err = pcall(function()
@@ -646,13 +642,13 @@ Realm3Tab:CreateSection("Trial Chests")
 Realm3Tab:CreateToggle({Name="Auto T1 Chest", Callback=function(v)S.autoT1Chest=v;if v then task.spawn(autoT1ChestLoop) end end})
 Realm3Tab:CreateToggle({Name="Auto T2 Chest", Callback=function(v)S.autoT2Chest=v;if v then task.spawn(autoT2ChestLoop) end end})
 
--- Trial Tabs
+-- Trial Tabs (Slider 100 yapıldı)
 for _, diff in ipairs({"Hard","Medium","Easy"}) do
     local tab = TrialTabs[diff]; local st = TrialState[diff]
     tab:CreateToggle({Name="Auto Join (Countdown ≤5s)", Flag="autoJoin_"..diff, Callback=function(v)st.autoJoin=v end})
     tab:CreateToggle({Name="Trial Walk", Flag="trialWalk_"..diff, Callback=function(v)st.walk=v;if v then st.wave=1;st.prevCount=-1 end end})
     tab:CreateToggle({Name="Auto Leave", Flag="autoLeave_"..diff, Callback=function(v)st.autoLeave=v end})
-    tab:CreateSlider({Name="Leave after wave", Range={1,40}, Increment=1, CurrentValue=5, Flag="leaveWave_"..diff, Callback=function(v)st.leaveWave=v end})
+    tab:CreateSlider({Name="Leave after wave", Range={1,100}, Increment=1, CurrentValue=5, Flag="leaveWave_"..diff, Callback=function(v)st.leaveWave=v end})
     tab:CreateButton({Name="Capture Point", Callback=function()
         local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
         if hrp then st.capturedPos = hrp.Position; Rayfield:Notify({Title="Capture", Content="Position saved!"}) end
