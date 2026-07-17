@@ -1,4 +1,4 @@
--- Sqays Hub – FULL (Mine, Hızlı Combat, Realm3, Trials) – Countdown≤5s + 2s Return + Safe Join (Wave 100)
+-- Sqays Hub – FULL (Mine, Hızlı Combat, Realm3, Trials) – Grind Fix + Rename
 local env = _G
 if env.NILoaded then return end
 env.NILoaded = true; env.NIStop = false
@@ -540,43 +540,49 @@ task.spawn(function()
     end
 end)
 
--- Grind + Wave + Leave + 2s Return
+-- Grind + Wave + Leave + 2s Return (sağlamlaştırıldı)
 for diff, data in pairs(Trials) do
     local st = TrialState[diff]
     task.spawn(function()
         while not env.NIStop do
-            if st.walk then
-                local char = LP.Character
-                local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                if not hrp then task.wait(0.3); continue end
-                local room = WS:FindFirstChild("__GAME_CONTENT") and WS.__GAME_CONTENT:FindFirstChild("Trials") and WS.__GAME_CONTENT.Trials:FindFirstChild(data.room)
-                if not room then task.wait(0.3); continue end
-                local target = findTrialMob(diff)
-                local alive = 0
-                for _, v in ipairs(room:GetDescendants()) do
-                    if v:IsA("Humanoid") and v.Health > 0 and v.Parent ~= char then alive = alive + 1 end
-                end
-                if target and (hrp.Position - target.Position).Magnitude > 5 then
-                    local tw = TS:Create(hrp, TweenInfo.new(0.3, Enum.EasingStyle.Linear), {CFrame = CFrame.new(target.Position)})
-                    tw:Play(); tw.Completed:Wait()
-                end
-                if st.prevCount > 0 and alive == 0 then
-                    st.wave = st.wave + 1
-                    print("["..diff.." WAVE] Wave "..st.wave)
-                    if st.autoLeave and st.leaveWave > 0 and st.wave >= st.leaveWave then
-                        print("[AUTO LEAVE] Leaving "..diff.." trial at wave "..st.wave)
-                        pcall(function() game:GetService("ReplicatedStorage").__Net.MainRemote:FireServer("LeaveTrial") end)
-                        st.walk = false
-                        pcall(function() Rayfield.Flags["trialWalk_"..diff] = false end)
-                        if st.autoReturn and st.capturedPos then
-                            task.delay(2, function()
-                                print("[RETURN] Returning to captured position...")
-                                teleportTo(st.capturedPos)
-                            end)
+            -- pcall ile sar, hata olursa yaz ve devam et
+            local ok, err = pcall(function()
+                if st.walk then
+                    local char = LP.Character
+                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                    if not hrp then task.wait(0.3); return end
+                    local room = WS:FindFirstChild("__GAME_CONTENT") and WS.__GAME_CONTENT:FindFirstChild("Trials") and WS.__GAME_CONTENT.Trials:FindFirstChild(data.room)
+                    if not room then task.wait(0.3); return end
+                    local target = findTrialMob(diff)
+                    local alive = 0
+                    for _, v in ipairs(room:GetDescendants()) do
+                        if v:IsA("Humanoid") and v.Health > 0 and v.Parent ~= char then alive = alive + 1 end
+                    end
+                    if target and (hrp.Position - target.Position).Magnitude > 5 then
+                        local tw = TS:Create(hrp, TweenInfo.new(0.3, Enum.EasingStyle.Linear), {CFrame = CFrame.new(target.Position)})
+                        tw:Play(); tw.Completed:Wait()
+                    end
+                    if st.prevCount > 0 and alive == 0 then
+                        st.wave = st.wave + 1
+                        print("["..diff.." WAVE] Wave "..st.wave)
+                        if st.autoLeave and st.leaveWave > 0 and st.wave >= st.leaveWave then
+                            print("[AUTO LEAVE] Leaving "..diff.." trial at wave "..st.wave)
+                            pcall(function() game:GetService("ReplicatedStorage").__Net.MainRemote:FireServer("LeaveTrial") end)
+                            st.walk = false
+                            pcall(function() Rayfield.Flags["trialWalk_"..diff] = false end)
+                            if st.autoReturn and st.capturedPos then
+                                task.delay(2, function()
+                                    print("[RETURN] Returning to captured position...")
+                                    teleportTo(st.capturedPos)
+                                end)
+                            end
                         end
                     end
+                    st.prevCount = alive
                 end
-                st.prevCount = alive
+            end)
+            if not ok then
+                warn("[GRIND "..diff.." ERROR] " .. tostring(err))
             end
             task.wait(0.3)
         end
@@ -642,18 +648,18 @@ Realm3Tab:CreateSection("Trial Chests")
 Realm3Tab:CreateToggle({Name="Auto T1 Chest", Callback=function(v)S.autoT1Chest=v;if v then task.spawn(autoT1ChestLoop) end end})
 Realm3Tab:CreateToggle({Name="Auto T2 Chest", Callback=function(v)S.autoT2Chest=v;if v then task.spawn(autoT2ChestLoop) end end})
 
--- Trial Tabs (Slider 100 yapıldı)
+-- Trial Tabs (isimler güncellendi, slider 100)
 for _, diff in ipairs({"Hard","Medium","Easy"}) do
     local tab = TrialTabs[diff]; local st = TrialState[diff]
     tab:CreateToggle({Name="Auto Join (Countdown ≤5s)", Flag="autoJoin_"..diff, Callback=function(v)st.autoJoin=v end})
-    tab:CreateToggle({Name="Trial Walk", Flag="trialWalk_"..diff, Callback=function(v)st.walk=v;if v then st.wave=1;st.prevCount=-1 end end})
+    tab:CreateToggle({Name="Auto Grind Trial", Flag="trialWalk_"..diff, Callback=function(v)st.walk=v;if v then st.wave=1;st.prevCount=-1 end end})
     tab:CreateToggle({Name="Auto Leave", Flag="autoLeave_"..diff, Callback=function(v)st.autoLeave=v end})
     tab:CreateSlider({Name="Leave after wave", Range={1,100}, Increment=1, CurrentValue=5, Flag="leaveWave_"..diff, Callback=function(v)st.leaveWave=v end})
     tab:CreateButton({Name="Capture Point", Callback=function()
         local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
         if hrp then st.capturedPos = hrp.Position; Rayfield:Notify({Title="Capture", Content="Position saved!"}) end
     end})
-    tab:CreateToggle({Name="Auto Old Position", Flag="autoReturn_"..diff, Callback=function(v)st.autoReturn=v end})
+    tab:CreateToggle({Name="Auto Return to the captured position", Flag="autoReturn_"..diff, Callback=function(v)st.autoReturn=v end})
 end
 
 -- Settings
