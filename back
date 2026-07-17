@@ -1,4 +1,4 @@
--- Sqays Hub – FULL (Mine, Hızlı Combat, Realm3, Trials) – Grind Fix + Rename
+-- Sqays Hub – FULL (Mine, Hızlı Combat, Realm3, Trials) – Countdown≤5s + 2s Return + Safe Join + Sequential Chests
 local env = _G
 if env.NILoaded then return end
 env.NILoaded = true; env.NIStop = false
@@ -435,10 +435,17 @@ local function autoStrongerShovelsLoop() while S.autoStrongerShovels and not env
 local function autoMoreSandLoop() while S.autoMoreSand and not env.NIStop do fireUpgradeMax("Sand","MoreSand"); task.wait(1) end end
 local function autoLevelUpShovelLoop() while S.autoLevelUpShovel and not env.NIStop do fireShovelLevelUp(); task.wait(S.shovelLevelUpInterval) end end
 
--- ===== TRIAL CHESTS =====
+-- ===== TRIAL CHESTS (SIRALI) =====
 local function openChest(t) pcall(function() game:GetService("ReplicatedStorage").__Net.MainRemote:FireServer("OpenChest", t, 7) end) end
-local function autoT1ChestLoop() while S.autoT1Chest and not env.NIStop do openChest("T1TrialChest"); task.wait(1) end end
-local function autoT2ChestLoop() while S.autoT2Chest and not env.NIStop do openChest("T2TrialChest"); task.wait(1) end end
+
+local function chestLoop()
+    while (S.autoT1Chest or S.autoT2Chest) and not env.NIStop do
+        if S.autoT1Chest then openChest("T1TrialChest"); task.wait(0.5) end
+        if S.autoT2Chest then openChest("T2TrialChest"); task.wait(0.5) end
+        if not S.autoT1Chest and not S.autoT2Chest then break end
+        task.wait(0.5)
+    end
+end
 
 -- ===== TRIAL SYSTEM =====
 local function teleportTo(pos)
@@ -451,10 +458,7 @@ local function teleportTo(pos)
         pcall(function() hrp.AssemblyLinearVelocity = Vector3.new() end)
         return true
     end)
-    if not ok then
-        warn("[TELEPORT] Exception: " .. tostring(result))
-        return false
-    end
+    if not ok then warn("[TELEPORT] Exception: " .. tostring(result)); return false end
     return result
 end
 local function getCountdownLabel(diff)
@@ -545,7 +549,6 @@ for diff, data in pairs(Trials) do
     local st = TrialState[diff]
     task.spawn(function()
         while not env.NIStop do
-            -- pcall ile sar, hata olursa yaz ve devam et
             local ok, err = pcall(function()
                 if st.walk then
                     local char = LP.Character
@@ -581,9 +584,7 @@ for diff, data in pairs(Trials) do
                     st.prevCount = alive
                 end
             end)
-            if not ok then
-                warn("[GRIND "..diff.." ERROR] " .. tostring(err))
-            end
+            if not ok then warn("[GRIND "..diff.." ERROR] " .. tostring(err)) end
             task.wait(0.3)
         end
     end)
@@ -645,8 +646,28 @@ Realm3Tab:CreateSection("Auto Shovel Level Up")
 Realm3Tab:CreateToggle({Name="Auto Level Up Shovel", Callback=function(v)S.autoLevelUpShovel=v;if v then task.spawn(autoLevelUpShovelLoop) end end})
 Realm3Tab:CreateSlider({Name="Interval (s)", Range={1,30}, Increment=1, CurrentValue=S.shovelLevelUpInterval, Callback=function(v)S.shovelLevelUpInterval=v end})
 Realm3Tab:CreateSection("Trial Chests")
-Realm3Tab:CreateToggle({Name="Auto T1 Chest", Callback=function(v)S.autoT1Chest=v;if v then task.spawn(autoT1ChestLoop) end end})
-Realm3Tab:CreateToggle({Name="Auto T2 Chest", Callback=function(v)S.autoT2Chest=v;if v then task.spawn(autoT2ChestLoop) end end})
+Realm3Tab:CreateToggle({
+    Name = "Auto T1 Chest",
+    CurrentValue = false,
+    Flag = "autoT1Chest",
+    Callback = function(v)
+        S.autoT1Chest = v
+        if v and not (S.autoT1Chest or S.autoT2Chest) then
+            task.spawn(chestLoop)
+        end
+    end
+})
+Realm3Tab:CreateToggle({
+    Name = "Auto T2 Chest",
+    CurrentValue = false,
+    Flag = "autoT2Chest",
+    Callback = function(v)
+        S.autoT2Chest = v
+        if v and not (S.autoT1Chest or S.autoT2Chest) then
+            task.spawn(chestLoop)
+        end
+    end
+})
 
 -- Trial Tabs (isimler güncellendi, slider 100)
 for _, diff in ipairs({"Hard","Medium","Easy"}) do
