@@ -1,4 +1,4 @@
--- Sqays Hub – FULL (Mine, Hızlı Combat, Realm3, Trials) – Countdown≤5s + 2s Return + Safe Join + Sequential Chests
+-- Sqays Hub – FULL (Mine, Hızlı Combat, Realm3, Trials) – Countdown≤5s + 2s Return + Safe Join + Sequential Chests2
 local env = _G
 if env.NILoaded then return end
 env.NILoaded = true; env.NIStop = false
@@ -435,7 +435,9 @@ local function autoStrongerShovelsLoop() while S.autoStrongerShovels and not env
 local function autoMoreSandLoop() while S.autoMoreSand and not env.NIStop do fireUpgradeMax("Sand","MoreSand"); task.wait(1) end end
 local function autoLevelUpShovelLoop() while S.autoLevelUpShovel and not env.NIStop do fireShovelLevelUp(); task.wait(S.shovelLevelUpInterval) end end
 
--- ===== TRIAL CHESTS (SIRALI) =====
+-- ===== TRIAL CHESTS (SIRALI - DÜZGÜN BAŞLATMA) =====
+local _chestLoopRunning = false
+
 local function openChest(t) pcall(function() game:GetService("ReplicatedStorage").__Net.MainRemote:FireServer("OpenChest", t, 7) end) end
 
 local function chestLoop()
@@ -445,6 +447,7 @@ local function chestLoop()
         if not S.autoT1Chest and not S.autoT2Chest then break end
         task.wait(0.5)
     end
+    _chestLoopRunning = false
 end
 
 -- ===== TRIAL SYSTEM =====
@@ -652,7 +655,8 @@ Realm3Tab:CreateToggle({
     Flag = "autoT1Chest",
     Callback = function(v)
         S.autoT1Chest = v
-        if v and not (S.autoT1Chest or S.autoT2Chest) then
+        if v and not _chestLoopRunning then
+            _chestLoopRunning = true
             task.spawn(chestLoop)
         end
     end
@@ -663,7 +667,8 @@ Realm3Tab:CreateToggle({
     Flag = "autoT2Chest",
     Callback = function(v)
         S.autoT2Chest = v
-        if v and not (S.autoT1Chest or S.autoT2Chest) then
+        if v and not _chestLoopRunning then
+            _chestLoopRunning = true
             task.spawn(chestLoop)
         end
     end
