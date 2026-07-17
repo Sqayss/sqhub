@@ -1,4 +1,4 @@
--- Sqays Hub – FULL (Mine, Hızlı Combat, Realm3, Trials) – Trial başlayınca Combat durur, bitince devam eder
+-- Sqays Hub – FULL (Mine, Hızlı Combat, Realm3, Trials) – Son Sürüm
 local env = _G
 if env.NILoaded then return end
 env.NILoaded = true; env.NIStop = false
@@ -102,7 +102,6 @@ local S = {
     autoNoobPharaoh = false, autoNoobMummy = false, autoNoobMerchant = false,
     autoStrongerShovels = false, autoMoreSand = false, autoLevelUpShovel = false, shovelLevelUpInterval = 5,
     autoT1Chest = false, autoT2Chest = false,
-    inTrial = false,  -- YENİ: herhangi bir trial'da olup olmadığımızı tutar
 }
 
 -- ===== TRIAL DATA =====
@@ -252,7 +251,7 @@ local function loop()
     end
 end
 
--- ===== HIZLI COMBAT SİSTEMİ =====
+-- ===== HIZLI COMBAT SİSTEMİ (Trial ile uyumlu) =====
 local function isRespawning(mob)
     local ok, result = pcall(function()
         for _, child in ipairs(mob:GetDescendants()) do
@@ -330,8 +329,10 @@ local function isInRealm3()
 end
 local function combatLoop()
     while S.combatRunning and not env.NIStop do
-        -- YENİ: Trial'da isek kesinlikle combat yapma, bekle
-        if S.inTrial then task.wait(0.3); continue end
+        -- Trial grind açık mı diye her adımda kontrol et
+        local inTrial = false
+        for _, st in pairs(TrialState) do if st.walk then inTrial = true; break end end
+        if inTrial then task.wait(0.3); continue end
         if not isInRealm3() then task.wait(0.1); continue end
         local any = false; for _, n in ipairs(MOBS) do if S["c"..n] then any = true; break end end
         if not any then task.wait(0.05); continue end
@@ -340,11 +341,18 @@ local function combatLoop()
         local mob, mobHRP, mobHum
         local ok = pcall(function() mob, mobHRP, mobHum = findBestMob() end)
         if not ok or not mob then task.wait(0.05); continue end
-        while mob and S.combatRunning and not S.inTrial do
+        while mob and S.combatRunning do
+            -- Tekrar trial kontrolü
+            local inTrialNow = false
+            for _, st in pairs(TrialState) do if st.walk then inTrialNow = true; break end end
+            if inTrialNow then break end
             local mobPos = mobHRP and mobHRP.Position; if not mobPos then mobPos = getMobPosition(mob) end
             if mobPos and not isCloseEnough(hrp, mobPos, 5) then glideTo(mobPos, S.combatTweenSpeed) end
             local lastScan, deathStart = 0, tick()
-            while S.combatRunning and mob and not S.inTrial do
+            while S.combatRunning and mob do
+                local inTrialNow2 = false
+                for _, st in pairs(TrialState) do if st.walk then inTrialNow2 = true; break end end
+                if inTrialNow2 then break end
                 if mobHum and mobHum.Health <= 0 then break end
                 if tick() - lastScan > 0.1 then
                     lastScan = tick()
@@ -521,8 +529,6 @@ task.spawn(function()
                                 if teleportOk then
                                     print("[AUTO JOIN "..diff.."] Teleport successful!")
                                     st.teleported = true
-                                    -- Trial başladı: combat'ı durdur
-                                    S.inTrial = true
                                 else
                                     warn("[AUTO JOIN "..diff.."] Teleport failed!")
                                 end
@@ -549,14 +555,13 @@ task.spawn(function()
     end
 end)
 
--- Grind + Wave + Leave + 2s Return (her 60 sn'de bir otomatik reset eklenmiş)
+-- Grind + Wave + Leave + 2s Return
 for diff, data in pairs(Trials) do
     local st = TrialState[diff]
     task.spawn(function()
         while not env.NIStop do
             local ok, err = pcall(function()
                 if st.walk then
-                    S.inTrial = true  -- Grind aktif olduğu sürece trial içindeyiz
                     local char = LP.Character
                     local hrp = char and char:FindFirstChild("HumanoidRootPart")
                     if not hrp then task.wait(0.3); return end
@@ -579,7 +584,6 @@ for diff, data in pairs(Trials) do
                             pcall(function() game:GetService("ReplicatedStorage").__Net.MainRemote:FireServer("LeaveTrial") end)
                             st.walk = false
                             pcall(function() Rayfield.Flags["trialWalk_"..diff] = false end)
-                            S.inTrial = false  -- Trial bitti, combat serbest
                             if st.autoReturn and st.capturedPos then
                                 task.delay(2, function()
                                     print("[RETURN] Returning to captured position...")
@@ -589,11 +593,6 @@ for diff, data in pairs(Trials) do
                         end
                     end
                     st.prevCount = alive
-                else
-                    -- Grind kapalıysa trial'da değiliz (başka bir trial da açık olmadığı sürece)
-                    local anyWalk = false
-                    for _, other in pairs(TrialState) do if other.walk then anyWalk = true; break end end
-                    if not anyWalk then S.inTrial = false end
                 end
             end)
             if not ok then warn("[GRIND "..diff.." ERROR] " .. tostring(err)) end
@@ -608,7 +607,6 @@ task.spawn(function()
         task.wait(60)
         for diff, st in pairs(TrialState) do
             if st.walk then
-                -- toggle'ı kapat-aç yap
                 st.walk = false
                 task.wait(0.2)
                 st.walk = true
@@ -649,10 +647,22 @@ for _, tier in ipairs(tiers) do
     end
 end
 
--- Combat Tab (Hızlı sistem)
+-- Combat Tab
 CombatTab:CreateSection("⚔ Mob Selection")
 for _, n in ipairs(MOBS) do
-    CombatTab:CreateToggle({Name=n, Flag="c"..n, Callback=function(v)S["c"..n]=v;if v and not S.combatRunning then S.combatRunning=true;task.spawn(combatLoop) end end})
+    CombatTab:CreateToggle({
+        Name = n, Flag = "c"..n, CurrentValue = false,
+        Callback = function(v)
+            S["c"..n] = v
+            if v then
+                if not S.combatRunning then S.combatRunning = true; task.spawn(combatLoop) end
+            else
+                local anyMob = false
+                for _, mobName in ipairs(MOBS) do if S["c"..mobName] then anyMob = true; break end end
+                if not anyMob then S.combatRunning = false end
+            end
+        end
+    })
 end
 CombatTab:CreateSection("Combat Settings")
 CombatTab:CreateSlider({Name="Glide Speed (s)", Range={0.1,2}, Increment=0.1, CurrentValue=S.combatTweenSpeed, Callback=function(v)S.combatTweenSpeed=v end})
@@ -677,31 +687,15 @@ Realm3Tab:CreateToggle({Name="Auto Level Up Shovel", Callback=function(v)S.autoL
 Realm3Tab:CreateSlider({Name="Interval (s)", Range={1,30}, Increment=1, CurrentValue=S.shovelLevelUpInterval, Callback=function(v)S.shovelLevelUpInterval=v end})
 Realm3Tab:CreateSection("Trial Chests")
 Realm3Tab:CreateToggle({
-    Name = "Auto T1 Chest",
-    CurrentValue = false,
-    Flag = "autoT1Chest",
-    Callback = function(v)
-        S.autoT1Chest = v
-        if v and not _chestLoopRunning then
-            _chestLoopRunning = true
-            task.spawn(chestLoop)
-        end
-    end
+    Name = "Auto T1 Chest", CurrentValue = false, Flag = "autoT1Chest",
+    Callback = function(v) S.autoT1Chest = v; if v and not _chestLoopRunning then _chestLoopRunning = true; task.spawn(chestLoop) end end
 })
 Realm3Tab:CreateToggle({
-    Name = "Auto T2 Chest",
-    CurrentValue = false,
-    Flag = "autoT2Chest",
-    Callback = function(v)
-        S.autoT2Chest = v
-        if v and not _chestLoopRunning then
-            _chestLoopRunning = true
-            task.spawn(chestLoop)
-        end
-    end
+    Name = "Auto T2 Chest", CurrentValue = false, Flag = "autoT2Chest",
+    Callback = function(v) S.autoT2Chest = v; if v and not _chestLoopRunning then _chestLoopRunning = true; task.spawn(chestLoop) end end
 })
 
--- Trial Tabs (isimler güncellendi, slider 100)
+-- Trial Tabs
 for _, diff in ipairs({"Hard","Medium","Easy"}) do
     local tab = TrialTabs[diff]; local st = TrialState[diff]
     tab:CreateToggle({Name="Auto Join (Countdown ≤5s)", Flag="autoJoin_"..diff, Callback=function(v)st.autoJoin=v end})
