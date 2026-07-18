@@ -1,4 +1,4 @@
--- Sqays Hub – FULL (Mine, Hızlı Combat, Realm3, Trials) – Combat sadece 7sn kala durur (trial odasında grind ederken çalışır)
+-- Sqays Hub – FULL (Mine, Hızlı Combat, Realm3, Trials) – Combat sadece 7sn kala durur (trial odasında grind ederken çalışır)2
 local env = _G
 if env.NILoaded then return end
 env.NILoaded = true; env.NIStop = false
@@ -587,10 +587,8 @@ for diff, data in pairs(Trials) do
                         if st.autoLeave and st.leaveWave > 0 and st.wave >= st.leaveWave then
                             print("[AUTO LEAVE] Leaving "..diff.." trial at wave "..st.wave)
                             pcall(function() game:GetService("ReplicatedStorage").__Net.MainRemote:FireServer("LeaveTrial") end)
-                            st.walk = false
                             st.wave = 1
                             st.prevCount = -1
-                            pcall(function() Rayfield.Flags["trialWalk_"..diff] = false end)
                             -- Leave olduktan sonra combat'ı tekrar çalışır hale getir
                             S.trialActive = false
                             if st.autoReturn and st.capturedPos then
@@ -610,20 +608,6 @@ for diff, data in pairs(Trials) do
     end)
 end
 
--- Her 60 saniyede bir grind döngüsünü sıfırla wave korunur
-task.spawn(function()
-    while not env.NIStop do
-        task.wait(60)
-        for diff, st in pairs(TrialState) do
-            if st.walk then
-                st.walk = false
-                task.wait(0.2)
-                st.walk = true
-                print("[GRIND RESET] "..diff.." grind restarted. Wave: "..st.wave)
-            end
-        end
-    end
-end)
 
 -- ===== RAYFIELD =====
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
