@@ -1,4 +1,4 @@
--- Sqays Hub – FULL (Mine, Hızlı Combat, Realm3, Trials) – Combat sadece 7sn kala durur (trial odasında grind ederken çalışırv2)
+-- Sqays Hub – FULL (Mine, Hızlı Combat, Realm3, Trials) – Combat sadece 7sn kala durur (trial odasında grind ederken çalışır) V3
 local env = _G
 if env.NILoaded then return end
 env.NILoaded = true; env.NIStop = false
@@ -92,6 +92,7 @@ end)
 
 local ORES = {"Stone","Coal","Copper","Iron","Silver","Gold","Platinum","Titanium","Uranium","Cobalt","Palladium","Ruby","Aetherite","Celestium","Voidsteel","Infinity"}
 local MOBS = {"Goblin","Skeleton","Orc","Pirate","Ninja","Warrior","Pirate Captain","Samurai","Pirate Admiral","Dark Commander","Samurai Master","Dark Knight","Ancient Boss"}
+local Noobs = {"Starter", "Cooker", "Farmer", "Archer", "Soldier", "Fisherman", "Knight", "Explorer", "Magician", "Merchant", "Mummy", "Pharaoh"}
 
 -- ===== STATE =====
 local S = {
@@ -103,6 +104,9 @@ local S = {
     autoStrongerShovels = false, autoMoreSand = false, autoLevelUpShovel = false, shovelLevelUpInterval = 5,
     autoT1Chest = false, autoT2Chest = false,
     trialActive = false,  -- combat durdurma bayrağı (sadece 7sn kala)
+    enchantInterval = 0.1,
+    autoRoll = {},
+    skipAlmighty = {}
 }
 
 -- ===== TRIAL DATA =====
@@ -131,6 +135,12 @@ for diff in pairs(Trials) do
         prevCount = -1, capturedPos = nil, autoReturn = false,
         teleported = false, lastLog = 0, listening = false, inTrial = false
     }
+end
+
+-- Her noob için enchant state başlat
+for _, noob in ipairs(Noobs) do
+    S.autoRoll[noob] = false
+    S.skipAlmighty[noob] = false
 end
 
 -- ===== NO CLIP =====
@@ -340,10 +350,11 @@ local function combatLoop()
         if anyGrindActive and inTrial then task.wait(0.3); continue end
         -- 7sn kala durur (auto join countdown)
         if S.trialActive then task.wait(0.3); continue end
-        local any = false; for _, n in ipairs(MOBS) do if S["c"..n] then any = true; break end end
-        if not any then task.wait(0.05); continue end
+        -- Leave olduktan sonra mob resetlemek için kontrol
         local char = LP.Character; local hrp = char and char:FindFirstChild("HumanoidRootPart")
         if not hrp then task.wait(0.05); continue end
+        local any = false; for _, n in ipairs(MOBS) do if S["c"..n] then any = true; break end end
+        if not any then task.wait(0.05); continue end
         local mob, mobHRP, mobHum
         local ok = pcall(function() mob, mobHRP, mobHum = findBestMob() end)
         if not ok or not mob then task.wait(0.05); continue end
@@ -464,8 +475,17 @@ local function teleportTo(pos)
         if not char then return false end
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if not hrp then return false end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then hum.PlatformStand = false; hum.Sit = false end
+        -- İlk teleport
         hrp.CFrame = CFrame.new(pos)
-        pcall(function() hrp.AssemblyLinearVelocity = Vector3.new() end)
+        hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+        task.wait(0.05)
+        -- İkinci teleport (güvenlik için)
+        hrp.CFrame = CFrame.new(pos)
+        hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
         return true
     end)
     if not ok then warn("[TELEPORT] Exception: " .. tostring(result)); return false end
@@ -501,6 +521,36 @@ local function findTrialMob(diff)
         end
     end
     return best
+end
+
+-- ===== ENCHANT ROLL =====
+local rollLoops = {}
+local function startRollLoop(noob)
+    if rollLoops[noob] then return end
+    rollLoops[noob] = task.spawn(function()
+        while S.autoRoll[noob] and not env.NIStop do
+            pcall(function()
+                local Event = RS.__Net.MainRemote
+                Event:FireServer("RollNoobEnchant", noob)
+            end)
+            task.wait(S.enchantInterval)
+        end
+        rollLoops[noob] = nil
+    end)
+end
+
+local warningConnection = nil
+local function setupWarningHandler()
+    if warningConnection then warningConnection:Disconnect() end
+
+    warningConnection = RS.__Net.EnchantWarning.OnClientEvent:Connect(function(noob, enchant)
+        if enchant == "Almighty" and S.skipAlmighty[noob] then
+            pcall(function()
+                local Event = RS.__Net.MainRemote
+                Event:FireServer("ConfirmRollEnchant", noob)
+            end)
+        end
+    end)
 end
 
 -- Auto Join Countdown ≤5s
@@ -629,6 +679,7 @@ local win = Rayfield:CreateWindow({
 local Main = win:CreateTab("⛏ Mine")
 local CombatTab = win:CreateTab("⚔ Combat")
 local Realm3Tab = win:CreateTab("🌍 Realm 3")
+local EnchantTab = win:CreateTab("✨ Enchant")
 local TrialTabs = {}
 for _, diff in ipairs({"Hard","Medium","Easy"}) do TrialTabs[diff] = win:CreateTab("⚡ "..diff.." Trial") end
 local SetTab = win:CreateTab("⚙ Settings")
@@ -693,6 +744,44 @@ Realm3Tab:CreateToggle({
     Name = "Auto T2 Chest", CurrentValue = false, Flag = "autoT2Chest",
     Callback = function(v) S.autoT2Chest = v; if v and not _chestLoopRunning then _chestLoopRunning = true; task.spawn(chestLoop) end end
 })
+
+-- Enchant Tab
+EnchantTab:CreateSection("Auto Roll")
+for _, noob in ipairs(Noobs) do
+    EnchantTab:CreateToggle({
+        Name = "Auto Roll " .. noob,
+        CurrentValue = false,
+        Callback = function(v)
+            S.autoRoll[noob] = v
+            if v then
+                startRollLoop(noob)
+            end
+        end
+    })
+end
+
+EnchantTab:CreateSection("Speed Settings")
+EnchantTab:CreateSlider({
+    Name = "Roll Interval (s)",
+    Range = {0.1, 1},
+    Increment = 0.1,
+    CurrentValue = S.enchantInterval,
+    Callback = function(v)
+        S.enchantInterval = v
+    end
+})
+
+EnchantTab:CreateSection("Skip Almighty")
+for _, noob in ipairs(Noobs) do
+    EnchantTab:CreateToggle({
+        Name = "Skip Almighty " .. noob,
+        CurrentValue = false,
+        Callback = function(v)
+            S.skipAlmighty[noob] = v
+            setupWarningHandler()
+        end
+    })
+end
 
 -- Trial Tabs
 for _, diff in ipairs({"Hard","Medium","Easy"}) do
