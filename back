@@ -1,4 +1,4 @@
--- Sqays Hub – FULL (Mine, Hızlı Combat, Realm3, Trials) – Combat sadece 7sn kala durur (trial odasında grind ederken çalışır)
+-- Sqays Hub – FULL (Mine, Hızlı Combat, Realm3, Trials) – Combat sadece 7sn kala durur (trial odasında grind ederken çalışırv2)
 local env = _G
 if env.NILoaded then return end
 env.NILoaded = true; env.NIStop = false
@@ -129,7 +129,7 @@ for diff in pairs(Trials) do
     TrialState[diff] = {
         autoJoin = false, autoLeave = false, walk = false, wave = 1, leaveWave = 5,
         prevCount = -1, capturedPos = nil, autoReturn = false,
-        teleported = false, lastLog = 0, listening = false
+        teleported = false, lastLog = 0, listening = false, inTrial = false
     }
 end
 
@@ -330,7 +330,15 @@ local function isInRealm3()
 end
 local function combatLoop()
     while S.combatRunning and not env.NIStop do
-        -- Sadece 7sn kala durur (auto join countdown)
+        -- Auto grind açık ve trialdeyse durdur
+        local anyGrindActive = false
+        local inTrial = false
+        for diff, st in pairs(TrialState) do
+            if st.walk then anyGrindActive = true end
+            if st.inTrial then inTrial = true end
+        end
+        if anyGrindActive and inTrial then task.wait(0.3); continue end
+        -- 7sn kala durur (auto join countdown)
         if S.trialActive then task.wait(0.3); continue end
         local any = false; for _, n in ipairs(MOBS) do if S["c"..n] then any = true; break end end
         if not any then task.wait(0.05); continue end
@@ -527,6 +535,7 @@ task.spawn(function()
                                 if teleportOk then
                                     print("[AUTO JOIN "..diff.."] Teleport successful!")
                                     st.teleported = true
+                                    st.inTrial = true
                                 else
                                     warn("[AUTO JOIN "..diff.."] Teleport failed!")
                                 end
@@ -569,8 +578,7 @@ for diff, data in pairs(Trials) do
                     if not hrp then task.wait(0.3); return end
                     local room = WS:FindFirstChild("__GAME_CONTENT") and WS.__GAME_CONTENT:FindFirstChild("Trials") and WS.__GAME_CONTENT.Trials:FindFirstChild(data.room)
                     if not room then task.wait(0.3); return end
-                    -- Trial odasındayken combat durdur (çakışma olmasın)
-                    S.trialActive = true
+                    -- Trial odasında grind ederken combat çalışır (çakışma yok)
                     local target = findTrialMob(diff)
                     local alive = 0
                     for _, v in ipairs(room:GetDescendants()) do
@@ -588,6 +596,7 @@ for diff, data in pairs(Trials) do
                             pcall(function() game:GetService("ReplicatedStorage").__Net.MainRemote:FireServer("LeaveTrial") end)
                             st.wave = 1
                             st.prevCount = -1
+                            st.inTrial = false
                             -- Leave olduktan sonra combat'ı tekrar çalışır hale getir
                             S.trialActive = false
                             if st.autoReturn and st.capturedPos then
