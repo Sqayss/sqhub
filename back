@@ -1,4 +1,4 @@
--- Sqays Hub – FULL (Mine, Hızlı Combat, Realm3, Trials) – Combat sadece 7sn kala durur (trial odasında grind ederken çalışır) V3
+-- Sqays Hub – FULL (Mine, Hızlı Combat, Realm3, Trials) – Combat sadece 7sn kala durur (trial odasında grind ederken çalışır)
 local env = _G
 if env.NILoaded then return end
 env.NILoaded = true; env.NIStop = false
@@ -127,6 +127,22 @@ local Trials = {
         path = {"__GAME_CONTENT","Trials_EasyTrialRoom","__TrialEasyRoom","TouchPart","BillboardGui","Timer1"}
     }
 }
+
+-- Tüm trial'lar aynı timer'ı kullanır
+local function getCountdownLabel(diff)
+    -- Hard path'i tüm trial'lar için kullan
+    local obj = WS
+    for _, name in ipairs(Trials["Hard"].path) do if obj then obj = obj:FindFirstChild(name) end end
+    if obj and obj:IsA("TextLabel") then return obj end
+
+    -- Fallback: Tüm workspace'te timer ara (diff'e bakmadan)
+    for _, v in ipairs(WS:GetDescendants()) do
+        if v:IsA("TextLabel") and v.Name:lower():find("timer") and v.Text:lower():find("trial") then
+            return v
+        end
+    end
+    return nil
+end
 
 local TrialState = {}
 for diff in pairs(Trials) do
@@ -507,7 +523,20 @@ local function parseCountdown(text)
     return min * 60 + sec
 end
 local function findTrialMob(diff)
+    -- Önce belirtilen room'u dene
     local room = WS:FindFirstChild("__GAME_CONTENT") and WS.__GAME_CONTENT:FindFirstChild("Trials") and WS.__GAME_CONTENT.Trials:FindFirstChild(Trials[diff].room)
+    if not room then
+        -- Fallback: Tüm Trials klasöründe ara
+        local trialsFolder = WS:FindFirstChild("__GAME_CONTENT") and WS.__GAME_CONTENT:FindFirstChild("Trials")
+        if trialsFolder then
+            for _, child in ipairs(trialsFolder:GetChildren()) do
+                if child:IsA("Model") and (child.Name:lower():find(diff:lower()) or child.Name:lower():find("trial")) then
+                    room = child
+                    break
+                end
+            end
+        end
+    end
     if not room then return nil end
     local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart"); if not hrp then return nil end
     local best, bestDist = nil, math.huge
@@ -626,7 +655,20 @@ for diff, data in pairs(Trials) do
                     local char = LP.Character
                     local hrp = char and char:FindFirstChild("HumanoidRootPart")
                     if not hrp then task.wait(0.3); return end
+                    -- Room bulma (fallback ile)
                     local room = WS:FindFirstChild("__GAME_CONTENT") and WS.__GAME_CONTENT:FindFirstChild("Trials") and WS.__GAME_CONTENT.Trials:FindFirstChild(data.room)
+                    if not room then
+                        -- Fallback: Tüm Trials klasöründe ara
+                        local trialsFolder = WS:FindFirstChild("__GAME_CONTENT") and WS.__GAME_CONTENT:FindFirstChild("Trials")
+                        if trialsFolder then
+                            for _, child in ipairs(trialsFolder:GetChildren()) do
+                                if child:IsA("Model") and (child.Name:lower():find(diff:lower()) or child.Name:lower():find("trial")) then
+                                    room = child
+                                    break
+                                end
+                            end
+                        end
+                    end
                     if not room then task.wait(0.3); return end
                     -- Trial odasında grind ederken combat çalışır (çakışma yok)
                     local target = findTrialMob(diff)
