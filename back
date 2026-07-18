@@ -1,4 +1,4 @@
--- Sqays Hub – FULL (Mine, Hızlı Combat, Realm3, Trials) – Combat sadece 7sn kala durur (trial odasında grind ederken çalışır) v5
+-- Sqays Hub – FULL (Mine, Hızlı Combat, Realm3, Trials) – Combat sadece 7sn kala durur (trial odasında grind ederken çalışır)
 local env = _G
 if env.NILoaded then return end
 env.NILoaded = true; env.NIStop = false
@@ -132,12 +132,6 @@ for diff in pairs(Trials) do
         prevCount = -1, capturedPos = nil, autoReturn = false,
         teleported = false, lastLog = 0, listening = false, inTrial = false
     }
-end
-
--- Her noob için enchant state başlat
-for _, noob in ipairs(Noobs) do
-    S.autoRoll[noob] = false
-    S.skipAlmighty[noob] = false
 end
 
 -- ===== NO CLIP =====
