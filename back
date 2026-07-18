@@ -1,4 +1,4 @@
--- Sqays Hub – FULL (Mine, Hızlı Combat, Realm3, Trials) – Son Sürüm
+-- Sqays Hub – FULL (Mine, Hızlı Combat, Realm3, Trials) – Combat sadece 7sn kala durur (trial odasında grind ederken çalışır)
 local env = _G
 if env.NILoaded then return end
 env.NILoaded = true; env.NIStop = false
@@ -102,6 +102,7 @@ local S = {
     autoNoobPharaoh = false, autoNoobMummy = false, autoNoobMerchant = false,
     autoStrongerShovels = false, autoMoreSand = false, autoLevelUpShovel = false, shovelLevelUpInterval = 5,
     autoT1Chest = false, autoT2Chest = false,
+    trialActive = false,  -- combat durdurma bayrağı (sadece 7sn kala)
 }
 
 -- ===== TRIAL DATA =====
@@ -251,7 +252,7 @@ local function loop()
     end
 end
 
--- ===== HIZLI COMBAT SİSTEMİ (Trial ile uyumlu) =====
+-- ===== HIZLI COMBAT SİSTEMİ (S.trialActive true ise sadece 7sn kala durur) =====
 local function isRespawning(mob)
     local ok, result = pcall(function()
         for _, child in ipairs(mob:GetDescendants()) do
@@ -329,10 +330,8 @@ local function isInRealm3()
 end
 local function combatLoop()
     while S.combatRunning and not env.NIStop do
-        -- Trial grind açık mı diye her adımda kontrol et
-        local inTrial = false
-        for _, st in pairs(TrialState) do if st.walk then inTrial = true; break end end
-        if inTrial then task.wait(0.3); continue end
+        -- Sadece 7sn kala durur (auto join countdown)
+        if S.trialActive then task.wait(0.3); continue end
         if not isInRealm3() then task.wait(0.1); continue end
         local any = false; for _, n in ipairs(MOBS) do if S["c"..n] then any = true; break end end
         if not any then task.wait(0.05); continue end
@@ -341,18 +340,11 @@ local function combatLoop()
         local mob, mobHRP, mobHum
         local ok = pcall(function() mob, mobHRP, mobHum = findBestMob() end)
         if not ok or not mob then task.wait(0.05); continue end
-        while mob and S.combatRunning do
-            -- Tekrar trial kontrolü
-            local inTrialNow = false
-            for _, st in pairs(TrialState) do if st.walk then inTrialNow = true; break end end
-            if inTrialNow then break end
+        while mob and S.combatRunning and not S.trialActive do
             local mobPos = mobHRP and mobHRP.Position; if not mobPos then mobPos = getMobPosition(mob) end
             if mobPos and not isCloseEnough(hrp, mobPos, 5) then glideTo(mobPos, S.combatTweenSpeed) end
             local lastScan, deathStart = 0, tick()
-            while S.combatRunning and mob do
-                local inTrialNow2 = false
-                for _, st in pairs(TrialState) do if st.walk then inTrialNow2 = true; break end end
-                if inTrialNow2 then break end
+            while S.combatRunning and mob and not S.trialActive do
                 if mobHum and mobHum.Health <= 0 then break end
                 if tick() - lastScan > 0.1 then
                     lastScan = tick()
@@ -504,7 +496,7 @@ local function findTrialMob(diff)
     return best
 end
 
--- Auto Join Countdown ≤5s (güvenli)
+-- Auto Join Countdown ≤5s
 task.spawn(function()
     while not env.NIStop do
         local success, err = pcall(function()
@@ -523,6 +515,10 @@ task.spawn(function()
                                 print("[AUTO JOIN "..diff.."] "..sec.." seconds until trial opens.")
                                 st.lastLog = os.time()
                             end
+                            -- 7 saniye kala combat'ı durdur
+                            if sec <= 7 then
+                                S.trialActive = true
+                            end
                             if sec <= 5 and not st.teleported then
                                 print("[AUTO JOIN "..diff.."] Countdown ≤5s, teleporting...")
                                 local teleportOk = teleportTo(Trials[diff].coord)
@@ -531,9 +527,16 @@ task.spawn(function()
                                     st.teleported = true
                                 else
                                     warn("[AUTO JOIN "..diff.."] Teleport failed!")
+                                    S.trialActive = false
                                 end
                             end
-                            if sec > 5 then st.teleported = false end
+                            if sec > 5 then 
+                                st.teleported = false
+                                -- Teleport sonrası combat'ı serbest bırak (trial odasında grind ederken çalışması için)
+                                if st.teleported then
+                                    S.trialActive = false
+                                end
+                            end
                         end
                     else
                         if os.time() - st.lastLog >= 30 then
@@ -555,7 +558,7 @@ task.spawn(function()
     end
 end)
 
--- Grind + Wave + Leave + 2s Return
+-- Grind + Wave + Leave + 2s Return (trial odasında combat çalışır)
 for diff, data in pairs(Trials) do
     local st = TrialState[diff]
     task.spawn(function()
@@ -567,6 +570,7 @@ for diff, data in pairs(Trials) do
                     if not hrp then task.wait(0.3); return end
                     local room = WS:FindFirstChild("__GAME_CONTENT") and WS.__GAME_CONTENT:FindFirstChild("Trials") and WS.__GAME_CONTENT.Trials:FindFirstChild(data.room)
                     if not room then task.wait(0.3); return end
+                    -- Trial odasındayız ama combat'ı durdurma (grind ederken çalışması için)
                     local target = findTrialMob(diff)
                     local alive = 0
                     for _, v in ipairs(room:GetDescendants()) do
@@ -583,6 +587,8 @@ for diff, data in pairs(Trials) do
                             print("[AUTO LEAVE] Leaving "..diff.." trial at wave "..st.wave)
                             pcall(function() game:GetService("ReplicatedStorage").__Net.MainRemote:FireServer("LeaveTrial") end)
                             st.walk = false
+                            st.wave = 1
+                            st.prevCount = -1
                             pcall(function() Rayfield.Flags["trialWalk_"..diff] = false end)
                             if st.autoReturn and st.capturedPos then
                                 task.delay(2, function()
@@ -601,7 +607,7 @@ for diff, data in pairs(Trials) do
     end)
 end
 
--- Her 60 saniyede bir grind döngüsünü sıfırla (toggle kapat-aç simülasyonu)
+-- Her 60 saniyede bir grind döngüsünü sıfırla wave korunur
 task.spawn(function()
     while not env.NIStop do
         task.wait(60)
@@ -610,9 +616,7 @@ task.spawn(function()
                 st.walk = false
                 task.wait(0.2)
                 st.walk = true
-                st.wave = 1
-                st.prevCount = -1
-                print("[GRIND RESET] "..diff.." grind restarted.")
+                print("[GRIND RESET] "..diff.." grind restarted. Wave: "..st.wave)
             end
         end
     end
