@@ -518,6 +518,9 @@ task.spawn(function()
                             -- 7 saniye kala combat'ı durdur
                             if sec <= 7 then
                                 S.trialActive = true
+                            else
+                                -- 7 saniyeden fazlaysa combat çalışır
+                                S.trialActive = false
                             end
                             if sec <= 5 and not st.teleported then
                                 print("[AUTO JOIN "..diff.."] Countdown ≤5s, teleporting...")
@@ -527,15 +530,10 @@ task.spawn(function()
                                     st.teleported = true
                                 else
                                     warn("[AUTO JOIN "..diff.."] Teleport failed!")
-                                    S.trialActive = false
                                 end
                             end
-                            if sec > 5 then 
+                            if sec > 5 then
                                 st.teleported = false
-                                -- Teleport sonrası combat'ı serbest bırak (trial odasında grind ederken çalışması için)
-                                if st.teleported then
-                                    S.trialActive = false
-                                end
                             end
                         end
                     else
@@ -546,6 +544,8 @@ task.spawn(function()
                     end
                 else
                     st.listening = false
+                    -- Auto join kapalıysa combat'ı serbest bırak
+                    S.trialActive = false
                 end
             end
         end)
@@ -570,7 +570,8 @@ for diff, data in pairs(Trials) do
                     if not hrp then task.wait(0.3); return end
                     local room = WS:FindFirstChild("__GAME_CONTENT") and WS.__GAME_CONTENT:FindFirstChild("Trials") and WS.__GAME_CONTENT.Trials:FindFirstChild(data.room)
                     if not room then task.wait(0.3); return end
-                    -- Trial odasındayız ama combat'ı durdurma (grind ederken çalışması için)
+                    -- Trial odasındayken combat durdur (çakışma olmasın)
+                    S.trialActive = true
                     local target = findTrialMob(diff)
                     local alive = 0
                     for _, v in ipairs(room:GetDescendants()) do
@@ -590,6 +591,8 @@ for diff, data in pairs(Trials) do
                             st.wave = 1
                             st.prevCount = -1
                             pcall(function() Rayfield.Flags["trialWalk_"..diff] = false end)
+                            -- Leave olduktan sonra combat'ı tekrar çalışır hale getir
+                            S.trialActive = false
                             if st.autoReturn and st.capturedPos then
                                 task.delay(2, function()
                                     print("[RETURN] Returning to captured position...")
